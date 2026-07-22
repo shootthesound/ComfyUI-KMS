@@ -3,8 +3,10 @@
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/lorasandlenses)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-A KSampler that **shows you N seeds before committing** — browse cheap previews,
-click the one you like, and only that seed gets finished. One node, one queue.
+Ever rendered eight images just to keep one? This KSampler peeks at a handful
+of seeds for a couple of steps each, shows you the contenders right on the
+node, and finishes **only the one you click**. Seed roulette, without the
+roulette.
 
 ![KSampler Multi-Choice: probe grid on the node, finished render on the right](images/workflow-example.png)
 
