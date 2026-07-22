@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-kms"
-description = "A KSampler that shows you N seeds before committing: cheap probe pass, clickable thumbnails on the node, then finishes only the seed you pick — exact split-sigma continuation, no wasted steps. Model agnostic."
-version = "0.3.0"
+description = "See what your seeds have in mind before you spend the steps: quick previews right on the node - click your favourite and only that image gets rendered. Exact continuation, no wasted steps, works with any model."
+version = "0.3.1"
 license = { text = "MIT" }
 dependencies = []
 
