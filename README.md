@@ -118,8 +118,16 @@ Don't take the "bit-identical" claim on faith — the pack includes a
    numbers say.
 
 Click any candidate you like — whichever you pick, the vanilla render follows
-the same seed. With a deterministic sampler (euler etc.) the checker should
-report bit-identical: the image you clicked *is* that seed's normal render.
+the same seed. With a deterministic sampler (euler etc.) the checker reports
+**bit-identical**: the image you clicked *is* that seed's normal render.
+
+**This includes fp8-quantized models.** The continuation doesn't reconstruct
+its starting point from the cached preview — it restarts from the *exact bits*
+the probe left off at. That matters more than it sounds: fp8 models chaotically
+amplify even a single float rounding error into visible micro-detail changes
+(we measured a 1e-8 difference growing to 0.1 in six steps during development).
+Skipping the round trip entirely is the only thing fp8 can't amplify, and the
+verify workflow will show you BIT-IDENTICAL on an fp8 checkpoint to prove it.
 
 ## Controls while choosing
 
