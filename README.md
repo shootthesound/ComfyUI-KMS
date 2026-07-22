@@ -6,6 +6,8 @@
 A KSampler that **shows you N seeds before committing** — browse cheap previews,
 click the one you like, and only that seed gets finished. One node, one queue.
 
+![KSampler Multi-Choice: probe grid on the node, finished render on the right](images/workflow-example.png)
+
 ## What it does
 
 1. **Probe pass** — runs just the first `probe_steps` steps for each of
@@ -20,6 +22,8 @@ click the one you like, and only that seed gets finished. One node, one queue.
    any other candidate and it renders too — the workflow re-queues and continues
    that seed straight from its cached probe endpoint (no re-probe, no waiting).
    Rendered candidates get a ✓ mark.
+
+![The clickable candidate grid drawn on the node](images/node-grid.png)
 
 ## Why you'd want it
 
