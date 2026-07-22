@@ -21,6 +21,7 @@ After a run completes the thumbnails stay clickable: the probe endpoints are kep
 in a server-side cache, so clicking another candidate re-queues the workflow and
 the node finishes that seed directly — no re-probe, no waiting.
 """
+import contextlib
 import threading
 
 import numpy as np
@@ -272,6 +273,42 @@ def _finish_sample(guider, sampler, noise, latent_dict, run_sigmas):
     return out, out_denoised
 
 
+@contextlib.contextmanager
+def _capture_raw_endpoint(ms, store):
+    """Grab the raw trajectory tensor the moment the probe run hands it to
+    model_sampling.inverse_noise_scaling — i.e. BEFORE the (1-sigma) division.
+
+    Why: comfy ends every run with inverse_noise_scaling and begins the next with
+    noise_scaling. For flow/CONST models that divide/multiply round trip costs
+    ~1ulp of float rounding — mathematically nothing, but fp8-quantized models
+    amplify it chaotically (measured on Krea 2 Turbo fp8: 1e-8 in, 7.7e-3 out
+    after ONE step; visibly different micro-detail after six). The only error
+    fp8 can't amplify is zero, so the continuation must restart from the exact
+    bits, not a reconstruction. Instance-level shadow, restored in finally."""
+    orig = ms.inverse_noise_scaling
+    def wrapper(sigma, latent):
+        store["raw"] = latent.detach().to("cpu", copy=True)
+        return orig(sigma, latent)
+    ms.inverse_noise_scaling = wrapper
+    try:
+        yield
+    finally:
+        del ms.inverse_noise_scaling
+
+
+@contextlib.contextmanager
+def _inject_raw_start(ms, raw):
+    """Make the continuation run's noise_scaling return the captured raw tensor
+    bit-for-bit instead of rescaling the cached endpoint (see _capture_raw_endpoint)."""
+    def wrapper(sigma, noise, latent_image, max_denoise=False):
+        return raw.to(device=latent_image.device, dtype=latent_image.dtype, copy=True)
+    ms.noise_scaling = wrapper
+    try:
+        yield
+    finally:
+        del ms.noise_scaling
+
+
 def _decode_preview(vae, samples):
     """Decode a candidate latent to a [1,H,W,C] image. Video-format latents may carry
     a length-1 temporal axis — take the first frame."""
@@ -390,10 +427,13 @@ class KSamplerMultiChoice:
             _CACHE.pop(nid, None)
             cache = None
 
+        ms = guider.model_patcher.get_model_object("model_sampling")
+
         if cache is not None and cache["queued_picks"]:
             # A thumbnail was clicked after the previous run finished — serve it
             # straight from the cached probe endpoints: no probe pass, no waiting.
             endpoints = cache["endpoints"]
+            raws = cache["raws"]
             preview_sheet = cache["preview_sheet"]
             base_seed = cache["base_seed"]
             pick = min(max(0, int(cache["queued_picks"].pop(0))), len(endpoints) - 1)
@@ -405,9 +445,10 @@ class KSamplerMultiChoice:
             base_seed = int(seed)
             pbar = comfy.utils.ProgressBar(int(num_seeds) * n_probe)
 
-            # Probe pass: for each seed keep the x0 preview and the raw trajectory
-            # endpoint the continuation resumes from.
-            endpoints, previews = [], []
+            # Probe pass: for each seed keep the x0 preview, the processed endpoint
+            # (comfy latent convention, used when the probe covers the whole
+            # schedule) and the RAW trajectory tensor (bit-exact continuation).
+            endpoints, raws, previews = [], [], []
             for i in range(int(num_seeds)):
                 seed_i = base_seed + i
                 noise_i = comfy.sample.prepare_noise(samples_in, seed_i, batch_inds)
@@ -418,11 +459,14 @@ class KSamplerMultiChoice:
                     captured.append(x0)
                     pbar.update_absolute(_i * n_probe + step + 1)
 
-                probe_out = guider.sample(noise_i, samples_in, sampler, probe_sigmas,
-                                          denoise_mask=noise_mask, callback=cb, disable_pbar=True,
-                                          seed=seed_i)
+                raw_store = {}
+                with _capture_raw_endpoint(ms, raw_store):
+                    probe_out = guider.sample(noise_i, samples_in, sampler, probe_sigmas,
+                                              denoise_mask=noise_mask, callback=cb,
+                                              disable_pbar=True, seed=seed_i)
                 if not captured:
                     continue
+                raws.append(raw_store.get("raw"))
                 endpoints.append(probe_out.detach().to("cpu", copy=True))
                 x0_latent = guider.model_patcher.model.process_latent_out(
                     captured[-1].detach().to("cpu", copy=True))
@@ -434,7 +478,7 @@ class KSamplerMultiChoice:
             preview_sheet = _cat_pad(previews)
             images = [_to_data_url(preview_sheet[i:i + 1]) for i in range(preview_sheet.shape[0])]
             if nid:
-                _CACHE[nid] = {"sig": sig, "endpoints": endpoints,
+                _CACHE[nid] = {"sig": sig, "endpoints": endpoints, "raws": raws,
                                "preview_sheet": preview_sheet, "images": images,
                                "base_seed": base_seed, "n_probe": n_probe,
                                "queued_picks": [], "done": set()}
@@ -452,8 +496,19 @@ class KSamplerMultiChoice:
                   f"({sigmas.shape[-1] - 1 - n_probe} steps left)")
             cont = latent_image.copy()
             cont["samples"] = endpoints[pick]
-            out, out_denoised = _finish_sample(guider, sampler, _ZeroNoise(seed_pick),
-                                               cont, sigmas[n_probe:])
+            raw = raws[pick] if pick < len(raws) else None
+            if raw is not None:
+                # Restart from the exact bits the probe left off at — the scale/
+                # unscale round trip is skipped entirely, so even fp8 models
+                # (which chaotically amplify 1-ulp differences) finish
+                # bit-identical to a vanilla render of this seed.
+                with _inject_raw_start(ms, raw):
+                    out, out_denoised = _finish_sample(guider, sampler,
+                                                       _ZeroNoise(seed_pick),
+                                                       cont, sigmas[n_probe:])
+            else:
+                out, out_denoised = _finish_sample(guider, sampler, _ZeroNoise(seed_pick),
+                                                   cont, sigmas[n_probe:])
         else:
             # The probe already covered the whole schedule — the endpoint is final.
             print(f"[MultiChoice] probe covered the full schedule — seed {seed_pick} is done")
