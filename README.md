@@ -101,13 +101,14 @@ plus the labelled preview sheet as an IMAGE and an info string.
 | Action | What it does |
 |---|---|
 | **Click** a thumbnail | Finish that candidate |
-| **Keys 0–9** | Pick by the number stamped on the thumbnail |
-| **Ctrl-click** (⌘-click on Mac) | Queue extra candidates — after your pick finishes, each queued one renders automatically, straight from its probe endpoint. Marked with a yellow `+` |
+| **Keys 0–9** | Same as clicking — pick by the number stamped on the thumbnail |
 | **Shift-hover** | Enlarge a thumbnail for a closer look before committing |
 
-Want several? Ctrl-click the extras, then click your favourite — they all come
-out of the same probe pass, one after another, each through your normal
-Preview/Save nodes.
+Both click and number keys keep working **after the run** — each one queues
+that candidate for an immediate re-render from its cached probe endpoint. Want
+several? Pick your favourite, then click (or key) the others as each run
+finishes — all from the same probe pass, each through your normal Preview/Save
+nodes.
 
 ## Waiting behaviour
 

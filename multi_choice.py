@@ -46,14 +46,7 @@ try:
         pick = int(data.get("pick", 0))
         p = _PENDING.get(nid)
         if p is not None:
-            # Node is blocked mid-execution — unblock it with this pick. Any
-            # extras (ctrl-clicked candidates) go into the queue; the frontend
-            # re-queues the prompt once per extra after this run finishes.
-            c = _CACHE.get(nid)
-            if c is not None:
-                for x in data.get("extras") or []:
-                    if int(x) != pick:
-                        c["queued_picks"].append(int(x))
+            # Node is blocked mid-execution — unblock it with this pick.
             p["pick"] = pick
             p["event"].set()
             return web.json_response({"ok": True, "mode": "live"})
@@ -453,17 +446,12 @@ class KSamplerMultiChoice:
             out_denoised = out
 
         done = [pick]
-        queued_remaining = 0
         if nid and nid in _CACHE:
             _CACHE[nid]["done"].add(pick)
             done = sorted(_CACHE[nid]["done"])
-            queued_remaining = len(_CACHE[nid]["queued_picks"])
         # The grid stays clickable after the run: clicking another candidate
         # re-queues the prompt and renders it from the cached probe endpoint.
-        # queued_remaining > 0 tells the frontend to re-queue for the next
-        # ctrl-clicked extra — each run drains one, chaining until empty.
-        _send_event("multichoice.finished", {"node_id": nid, "pick": pick, "done": done,
-                                             "queued_remaining": queued_remaining})
+        _send_event("multichoice.finished", {"node_id": nid, "pick": pick, "done": done})
 
         info = "\n".join([f"picked candidate {pick} -> seed {seed_pick}"] +
                          [f"candidate {i}: seed {base_seed + i}, probed {n_probe} step(s)"

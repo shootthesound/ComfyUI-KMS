@@ -5,16 +5,19 @@ import { api } from "../../scripts/api.js";
 // candidate previews here; we draw them as a clickable grid on the node and POST
 // the clicked index back, which unblocks sampling.
 //
-// Controls while waiting:  click = finish that candidate;  ctrl-click = queue a
-// candidate to render after the picked one (toggle);  keys 0-9 = pick by the
-// number stamped on the thumbnail;  shift-hover = enlarge a thumbnail.
-// After the run any click queues that candidate for an immediate re-render.
+// Controls:  click a thumbnail (or press its 0-9 number) to finish that
+// candidate;  shift-hover enlarges a thumbnail.  After the run, clicks and
+// number keys keep working — each one queues that candidate for an immediate
+// re-render from its cached probe endpoint.
 
 const MARGIN = 8;
 const GAP = 4;
+const TEXT_BAND = 16; // reserved strip between the widgets and the grid for the status line
 
-// node ids currently blocked waiting for a pick — target of the 0-9 key shortcut
+// node ids currently blocked waiting for a pick — targets of the 0-9 key shortcut
 const WAITING = new Set();
+// the multichoice node that most recently showed candidates — post-run key target
+let lastActiveId = null;
 
 function gridTop(node) {
     let top = 120;
@@ -23,7 +26,7 @@ function gridTop(node) {
         const ly = ws[ws.length - 1].last_y;
         if (typeof ly === "number") top = ly + LiteGraph.NODE_WIDGET_HEIGHT + 10;
     }
-    return top;
+    return top + TEXT_BAND;
 }
 
 function gridLayout(node) {
@@ -48,22 +51,35 @@ function hitIndex(node, pos) {
 }
 
 function postPick(node, i) {
-    // Extras: candidates ctrl-clicked while waiting. The server queues them and
-    // each finished run re-queues the prompt for the next one (chained).
-    const extras = node.mcWaiting ? (node.mcQueued || []).filter((q) => q !== i) : [];
     node.mcPicked = i;
     node.mcWaiting = false;
     node.setDirtyCanvas(true, true);
     api.fetchApi("/multichoice/pick", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ node_id: node.id, pick: i, extras }),
+        body: JSON.stringify({ node_id: node.id, pick: i }),
     }).then(async (r) => {
         const j = await r.json();
         // Pick landed after the run finished — re-queue; the node renders it
         // from the cached probe endpoint (no re-probe).
         if (j?.mode === "queued") app.queuePrompt(0);
     }).catch(() => {});
+}
+
+// The node the 0-9 keys should act on: a node that is actually waiting if there
+// is one (stale WAITING entries are pruned so a missed event can't jam this),
+// otherwise the most recent finished grid (keys then queue re-renders).
+function keyTarget() {
+    for (const id of [...WAITING]) {
+        const n = app.graph.getNodeById(Number(id));
+        if (n?.mcWaiting && n.mcImages?.length) return n;
+        WAITING.delete(id);
+    }
+    if (lastActiveId != null) {
+        const n = app.graph.getNodeById(Number(lastActiveId));
+        if (n?.mcFinished && n.mcImages?.length) return n;
+    }
+    return null;
 }
 
 app.registerExtension({
@@ -74,6 +90,7 @@ app.registerExtension({
             const { node_id, images, waiting } = e.detail;
             const node = app.graph.getNodeById(Number(node_id));
             if (!node) return;
+            lastActiveId = String(node_id);
             node.mcImages = images.map((src) => {
                 const img = new Image();
                 img.onload = () => node.setDirtyCanvas(true, true);
@@ -81,7 +98,6 @@ app.registerExtension({
                 return img;
             });
             node.mcPicked = -1;
-            node.mcQueued = [];
             node.mcZoom = -1;
             node.mcWaiting = waiting !== false;
             if (node.mcWaiting) {
@@ -107,69 +123,32 @@ app.registerExtension({
         // Run finished: the candidates stay clickable — picking another one
         // re-queues the prompt and it renders from the cached probe endpoint.
         api.addEventListener("multichoice.finished", (e) => {
-            const { node_id, pick, done, queued_remaining } = e.detail;
+            const { node_id, pick, done } = e.detail;
             WAITING.delete(String(node_id));
             const node = app.graph.getNodeById(Number(node_id));
             if (!node) return;
+            lastActiveId = String(node_id);
             node.mcWaiting = false;
             node.mcFinished = true;
             node.mcPicked = pick;
             node.mcDone = done || [];
-            node.mcQueued = (node.mcQueued || []).filter((q) => !node.mcDone.includes(q));
             node.setDirtyCanvas(true, true);
-            // Ctrl-clicked extras still pending server-side — run the next one.
-            if (queued_remaining > 0) app.queuePrompt(0);
         });
 
-        // Number keys pick by the index stamped on each thumbnail (0-9), aimed
-        // at whichever single node is currently waiting. Capture phase on window
-        // so the frontend's canvas key handling can't swallow it first.
+        // Number keys pick by the index stamped on each thumbnail (0-9). While
+        // waiting they finish that candidate; after the run they queue it for a
+        // re-render. Capture phase on window so the canvas key handling can't
+        // swallow the event first.
         window.addEventListener("keydown", (ev) => {
             if (!/^[0-9]$/.test(ev.key) || ev.ctrlKey || ev.altKey || ev.metaKey) return;
             const t = ev.target;
             if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t?.isContentEditable) return;
-            if (WAITING.size !== 1) return;
-            const node = app.graph.getNodeById(Number([...WAITING][0]));
+            const node = keyTarget();
             const i = parseInt(ev.key, 10);
-            if (!node?.mcWaiting || i >= (node.mcImages?.length || 0)) return;
+            if (!node || i >= (node.mcImages?.length || 0)) return;
             ev.preventDefault();
             ev.stopImmediatePropagation();
             postPick(node, i);
-        }, true);
-
-        // Ctrl/cmd-click queueing. LiteGraph swallows ctrl+click at canvas level
-        // (selection rectangle) before the node's onMouseDown ever fires, so we
-        // intercept pointerdown on the canvas in capture phase, hit-test the
-        // grid ourselves, and stop the event when it's ours.
-        const cv = app.canvas;
-        cv?.canvas?.addEventListener("pointerdown", (ev) => {
-            if (!(ev.ctrlKey || ev.metaKey) || ev.button !== 0) return;
-            let pos;
-            if (typeof cv.convertEventToCanvasOffset === "function") {
-                pos = cv.convertEventToCanvasOffset(ev);
-            } else {
-                const r = cv.canvas.getBoundingClientRect();
-                pos = [(ev.clientX - r.left) / cv.ds.scale - cv.ds.offset[0],
-                       (ev.clientY - r.top) / cv.ds.scale - cv.ds.offset[1]];
-            }
-            const node = app.graph.getNodeOnPos(pos[0], pos[1]);
-            if (node?.comfyClass !== "KSamplerMultiChoice") return;
-            if (!(node.mcWaiting || node.mcFinished) || !node.mcImages?.length) return;
-            const i = hitIndex(node, [pos[0] - node.pos[0], pos[1] - node.pos[1]]);
-            if (i < 0) return;
-            ev.preventDefault();
-            ev.stopImmediatePropagation();
-            if (node.mcWaiting) {
-                // Toggle "also render this one after my pick".
-                node.mcQueued = node.mcQueued || [];
-                const k = node.mcQueued.indexOf(i);
-                if (k >= 0) node.mcQueued.splice(k, 1);
-                else node.mcQueued.push(i);
-                node.setDirtyCanvas(true, true);
-            } else {
-                // Post-run: same as a plain click — queue an immediate render.
-                postPick(node, i);
-            }
         }, true);
     },
 
@@ -197,18 +176,6 @@ app.registerExtension({
                 } else {
                     ctx.fillStyle = "#333";
                     ctx.fillRect(x, y, w, h);
-                }
-                if (this.mcQueued?.includes(i)) {
-                    // Ctrl-clicked — will render after the picked one.
-                    ctx.strokeStyle = "#fc0";
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(x, y, w, h);
-                    ctx.fillStyle = "rgba(0,0,0,0.6)";
-                    ctx.fillRect(x + 2, y + 2, 20, 16);
-                    ctx.fillStyle = "#fc0";
-                    ctx.font = "bold 12px Arial";
-                    ctx.textAlign = "center";
-                    ctx.fillText("+", x + 12, y + 14);
                 }
                 if (this.mcDone?.includes(i)) {
                     // Already rendered — tick in the top-right corner.
@@ -242,9 +209,9 @@ app.registerExtension({
                 ctx.font = "12px Arial";
                 ctx.textAlign = "center";
                 ctx.fillText(this.mcWaiting
-                    ? "click / keys 0-9 to finish · ctrl-click queues extras · shift-hover zooms"
-                    : "click another candidate to render it too",
-                    this.size[0] / 2, g.top - 2);
+                    ? "click or keys 0-9 to finish a candidate · shift-hover zooms"
+                    : "click or keys 0-9 to render another candidate",
+                    this.size[0] / 2, g.top - 5);
             }
             ctx.restore();
         };
@@ -254,9 +221,6 @@ app.registerExtension({
             if ((this.mcWaiting || this.mcFinished) && this.mcImages?.length) {
                 const i = hitIndex(this, pos);
                 if (i >= 0) {
-                    // Ctrl/cmd-clicks never arrive here — LiteGraph intercepts
-                    // them at canvas level; the capture-phase pointerdown
-                    // listener in setup() handles queueing.
                     postPick(this, i);
                     return true;
                 }
