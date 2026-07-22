@@ -12,10 +12,10 @@ click the one you like, and only that seed gets finished. One node, one queue.
    `num_seeds` consecutive seeds. Enough to see the scene each seed will produce.
 2. **Pause** — the node stops and shows the candidates as clickable thumbnails
    drawn right on the node. No popup, no extra window.
-3. **Click one** — it finishes **only that seed's image**, continuing the
-   trajectory from the probe endpoint. No probe work is wasted, and with
-   deterministic samplers the result is bit-identical to a normal full render
-   of that seed.
+3. **Click one** (or press its number key) — it finishes **only that seed's
+   image**, continuing the trajectory from the probe endpoint. No probe work is
+   wasted, and with deterministic samplers the result is bit-identical to a
+   normal full render of that seed.
 4. **Changed your mind?** After the run, the thumbnails stay clickable. Click
    any other candidate and it renders too — the workflow re-queues and continues
    that seed straight from its cached probe endpoint (no re-probe, no waiting).

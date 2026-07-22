@@ -274,7 +274,7 @@
         "Node name for S&R": "easy showAnything"
       },
       "widgets_values": [
-        "picked candidate 1 -> seed 59246383582462\ncandidate 0: seed 59246383582461, probed 2 step(s)\ncandidate 1: seed 59246383582462, probed 2 step(s)\ncandidate 2: seed 59246383582463, probed 2 step(s)\ncandidate 3: seed 59246383582464, probed 2 step(s)\ncandidate 4: seed 59246383582465, probed 2 step(s)\ncandidate 5: seed 59246383582466, probed 2 step(s)"
+        "picked candidate 0 -> seed 787405599533683\ncandidate 0: seed 787405599533683, probed 2 step(s)\ncandidate 1: seed 787405599533684, probed 2 step(s)\ncandidate 2: seed 787405599533685, probed 2 step(s)\ncandidate 3: seed 787405599533686, probed 2 step(s)\ncandidate 4: seed 787405599533687, probed 2 step(s)\ncandidate 5: seed 787405599533688, probed 2 step(s)"
       ]
     },
     {
@@ -349,7 +349,8 @@
         "cnr_id": "comfy-core",
         "ver": "0.28.0",
         "Node name for S&R": "VAEDecode"
-      }
+      },
+      "widgets_values": []
     },
     {
       "id": 51,
@@ -389,7 +390,7 @@
         "Node name for S&R": "CLIPTextEncode"
       },
       "widgets_values": [
-        "a horse, a man, a dinosaur, a stone age woman and a pigeon walk into a bar. the bar is called Mad Times. photo."
+        "a horse, a man, a dinosaur, a stone age woman and a pigeon walk into a bar. the bar is called Try My Other Nodes. photo. "
       ],
       "color": "#232",
       "bgcolor": "#353"
@@ -468,10 +469,12 @@
         }
       ],
       "properties": {
+        "aux_id": "shootthesound/ComfyUI-KMS",
+        "ver": "54732defd9ef27f3d8e2bd317f8569587ee9934f",
         "Node name for S&R": "KSamplerMultiChoice"
       },
       "widgets_values": [
-        170796514673939,
+        853542458626140,
         "randomize",
         1,
         "euler",
@@ -479,7 +482,8 @@
         8,
         6,
         2,
-        0
+        0,
+        1
       ]
     }
   ],
@@ -655,10 +659,10 @@
     "VHS_MetadataImage": true,
     "VHS_KeepIntermediate": true,
     "ds": {
-      "scale": 1.0610764609501306,
+      "scale": 0.4950000000000663,
       "offset": [
-        1331.6139951763098,
-        1530.0041840108634
+        2730.580633917182,
+        1754.1041124056878
       ]
     }
   },
