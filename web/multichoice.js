@@ -122,8 +122,9 @@ app.registerExtension({
         });
 
         // Number keys pick by the index stamped on each thumbnail (0-9), aimed
-        // at whichever single node is currently waiting.
-        document.addEventListener("keydown", (ev) => {
+        // at whichever single node is currently waiting. Capture phase on window
+        // so the frontend's canvas key handling can't swallow it first.
+        window.addEventListener("keydown", (ev) => {
             if (!/^[0-9]$/.test(ev.key) || ev.ctrlKey || ev.altKey || ev.metaKey) return;
             const t = ev.target;
             if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t?.isContentEditable) return;
@@ -131,8 +132,45 @@ app.registerExtension({
             const node = app.graph.getNodeById(Number([...WAITING][0]));
             const i = parseInt(ev.key, 10);
             if (!node?.mcWaiting || i >= (node.mcImages?.length || 0)) return;
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
             postPick(node, i);
-        });
+        }, true);
+
+        // Ctrl/cmd-click queueing. LiteGraph swallows ctrl+click at canvas level
+        // (selection rectangle) before the node's onMouseDown ever fires, so we
+        // intercept pointerdown on the canvas in capture phase, hit-test the
+        // grid ourselves, and stop the event when it's ours.
+        const cv = app.canvas;
+        cv?.canvas?.addEventListener("pointerdown", (ev) => {
+            if (!(ev.ctrlKey || ev.metaKey) || ev.button !== 0) return;
+            let pos;
+            if (typeof cv.convertEventToCanvasOffset === "function") {
+                pos = cv.convertEventToCanvasOffset(ev);
+            } else {
+                const r = cv.canvas.getBoundingClientRect();
+                pos = [(ev.clientX - r.left) / cv.ds.scale - cv.ds.offset[0],
+                       (ev.clientY - r.top) / cv.ds.scale - cv.ds.offset[1]];
+            }
+            const node = app.graph.getNodeOnPos(pos[0], pos[1]);
+            if (node?.comfyClass !== "KSamplerMultiChoice") return;
+            if (!(node.mcWaiting || node.mcFinished) || !node.mcImages?.length) return;
+            const i = hitIndex(node, [pos[0] - node.pos[0], pos[1] - node.pos[1]]);
+            if (i < 0) return;
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+            if (node.mcWaiting) {
+                // Toggle "also render this one after my pick".
+                node.mcQueued = node.mcQueued || [];
+                const k = node.mcQueued.indexOf(i);
+                if (k >= 0) node.mcQueued.splice(k, 1);
+                else node.mcQueued.push(i);
+                node.setDirtyCanvas(true, true);
+            } else {
+                // Post-run: same as a plain click — queue an immediate render.
+                postPick(node, i);
+            }
+        }, true);
     },
 
     async nodeCreated(node) {
@@ -216,16 +254,10 @@ app.registerExtension({
             if ((this.mcWaiting || this.mcFinished) && this.mcImages?.length) {
                 const i = hitIndex(this, pos);
                 if (i >= 0) {
-                    if (this.mcWaiting && (e.ctrlKey || e.metaKey)) {
-                        // Toggle "also render this one after my pick".
-                        this.mcQueued = this.mcQueued || [];
-                        const k = this.mcQueued.indexOf(i);
-                        if (k >= 0) this.mcQueued.splice(k, 1);
-                        else this.mcQueued.push(i);
-                        this.setDirtyCanvas(true, true);
-                    } else {
-                        postPick(this, i);
-                    }
+                    // Ctrl/cmd-clicks never arrive here — LiteGraph intercepts
+                    // them at canvas level; the capture-phase pointerdown
+                    // listener in setup() handles queueing.
+                    postPick(this, i);
                     return true;
                 }
             }

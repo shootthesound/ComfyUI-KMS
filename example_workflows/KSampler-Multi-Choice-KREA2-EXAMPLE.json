@@ -274,51 +274,8 @@
         "Node name for S&R": "easy showAnything"
       },
       "widgets_values": [
-        "picked candidate 4 -> seed 680477313450509\ncandidate 0: seed 680477313450505, probed 1 step(s)\ncandidate 1: seed 680477313450506, probed 1 step(s)\ncandidate 2: seed 680477313450507, probed 1 step(s)\ncandidate 3: seed 680477313450508, probed 1 step(s)\ncandidate 4: seed 680477313450509, probed 1 step(s)\ncandidate 5: seed 680477313450510, probed 1 step(s)\ncandidate 6: seed 680477313450511, probed 1 step(s)\ncandidate 7: seed 680477313450512, probed 1 step(s)"
+        "picked candidate 1 -> seed 59246383582462\ncandidate 0: seed 59246383582461, probed 2 step(s)\ncandidate 1: seed 59246383582462, probed 2 step(s)\ncandidate 2: seed 59246383582463, probed 2 step(s)\ncandidate 3: seed 59246383582464, probed 2 step(s)\ncandidate 4: seed 59246383582465, probed 2 step(s)\ncandidate 5: seed 59246383582466, probed 2 step(s)"
       ]
-    },
-    {
-      "id": 51,
-      "type": "CLIPTextEncode",
-      "pos": [
-        -932.5178289316414,
-        -1166.1994997006007
-      ],
-      "size": [
-        480,
-        420
-      ],
-      "flags": {},
-      "order": 5,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "clip",
-          "type": "CLIP",
-          "link": 72
-        }
-      ],
-      "outputs": [
-        {
-          "name": "CONDITIONING",
-          "type": "CONDITIONING",
-          "slot_index": 0,
-          "links": [
-            80,
-            153
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.25.0",
-        "Node name for S&R": "CLIPTextEncode"
-      },
-      "widgets_values": [
-        "a horse, a man and a pigeon walk into a bar"
-      ],
-      "color": "#232",
-      "bgcolor": "#353"
     },
     {
       "id": 81,
@@ -393,6 +350,49 @@
         "ver": "0.28.0",
         "Node name for S&R": "VAEDecode"
       }
+    },
+    {
+      "id": 51,
+      "type": "CLIPTextEncode",
+      "pos": [
+        -932.5178289316414,
+        -1166.1994997006007
+      ],
+      "size": [
+        480,
+        420
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 72
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            80,
+            153
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.25.0",
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "a horse, a man, a dinosaur, a stone age woman and a pigeon walk into a bar. the bar is called Mad Times. photo."
+      ],
+      "color": "#232",
+      "bgcolor": "#353"
     },
     {
       "id": 96,
@@ -471,7 +471,7 @@
         "Node name for S&R": "KSamplerMultiChoice"
       },
       "widgets_values": [
-        368991960134881,
+        170796514673939,
         "randomize",
         1,
         "euler",
@@ -655,10 +655,10 @@
     "VHS_MetadataImage": true,
     "VHS_KeepIntermediate": true,
     "ds": {
-      "scale": 0.7247295000000837,
+      "scale": 1.0610764609501306,
       "offset": [
-        2203.4521362637847,
-        1655.560124139105
+        1331.6139951763098,
+        1530.0041840108634
       ]
     }
   },
