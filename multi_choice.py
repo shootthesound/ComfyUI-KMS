@@ -184,6 +184,20 @@ def _probe_sig(model, positive, negative, latent_image, cfg, sampler_name, num_s
             tuple(round(float(x), 6) for x in sigmas.flatten().tolist()))
 
 
+# Field names matching _probe_sig's tuple positions — used to report WHY the
+# cache was invalidated, so a re-probe never looks like a silent regression.
+_SIG_FIELDS = ("model", "positive conditioning", "negative conditioning",
+               "latent shape", "latent content", "latent content", "cfg",
+               "sampler", "num_seeds", "probe_steps", "sigma schedule")
+
+
+def _sig_diff(old, new):
+    """Names of the _probe_sig fields that differ between two signatures."""
+    changed = [n for n, a, b in zip(_SIG_FIELDS, old, new) if a != b]
+    # de-dupe (latent mean/std share a label) while keeping order
+    return list(dict.fromkeys(changed))
+
+
 def _send_event(name, payload):
     if PromptServer is not None:
         try:
@@ -368,7 +382,11 @@ class KSamplerMultiChoice:
                          num_seeds, n_probe, sigmas)
         cache = _CACHE.get(nid) if nid else None
         if cache is not None and cache["sig"] != sig:
-            # Inputs changed — the cached candidates are stale.
+            # Inputs changed — the cached candidates are stale. Say which input,
+            # so the re-probe doesn't read as a silent performance regression.
+            changed = ", ".join(_sig_diff(cache["sig"], sig)) or "inputs"
+            print(f"[MultiChoice] cached candidates invalidated ({changed} changed) "
+                  f"— re-probing")
             _CACHE.pop(nid, None)
             cache = None
 
