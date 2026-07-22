@@ -90,10 +90,24 @@ wiring needed.
 | `num_seeds` | How many consecutive seeds to browse — one thumbnail each |
 | `probe_steps` | Steps run per seed before its preview is captured |
 | `timeout_sec` | Auto-pick candidate 0 after this many seconds. 0 = wait forever |
-| `sigmas` (optional) | Custom schedule override — replaces scheduler/steps |
+| `denoise` | 1.0 = txt2img. Lower it to browse seeds for an img2img / refine pass on your input latent, exactly like a standard KSampler |
+| `sigmas` (optional) | Custom schedule override — replaces scheduler/steps/denoise |
 
 Outputs the same `output` / `denoised_output` pair as `SamplerCustomAdvanced`,
 plus the labelled preview sheet as an IMAGE and an info string.
+
+## Controls while choosing
+
+| Action | What it does |
+|---|---|
+| **Click** a thumbnail | Finish that candidate |
+| **Keys 0–9** | Pick by the number stamped on the thumbnail |
+| **Ctrl-click** (⌘-click on Mac) | Queue extra candidates — after your pick finishes, each queued one renders automatically, straight from its probe endpoint. Marked with a yellow `+` |
+| **Shift-hover** | Enlarge a thumbnail for a closer look before committing |
+
+Want several? Ctrl-click the extras, then click your favourite — they all come
+out of the same probe pass, one after another, each through your normal
+Preview/Save nodes.
 
 ## Waiting behaviour
 

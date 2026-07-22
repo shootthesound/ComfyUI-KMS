@@ -46,7 +46,14 @@ try:
         pick = int(data.get("pick", 0))
         p = _PENDING.get(nid)
         if p is not None:
-            # Node is blocked mid-execution — unblock it with this pick.
+            # Node is blocked mid-execution — unblock it with this pick. Any
+            # extras (ctrl-clicked candidates) go into the queue; the frontend
+            # re-queues the prompt once per extra after this run finishes.
+            c = _CACHE.get(nid)
+            if c is not None:
+                for x in data.get("extras") or []:
+                    if int(x) != pick:
+                        c["queued_picks"].append(int(x))
             p["pick"] = pick
             p["event"].set()
             return web.json_response({"ok": True, "mode": "live"})
@@ -129,16 +136,25 @@ def _make_sampler(sampler_name):
     return comfy.samplers.sampler_object(sampler_name)
 
 
-def _resolve_sigmas(guider, scheduler, steps, sigmas):
+def _resolve_sigmas(guider, scheduler, steps, denoise, sigmas):
     """The schedule to sample with: the SIGMAS override if connected, else the model's
-    standard schedule (what BasicScheduler with denoise=1.0 would output)."""
+    standard schedule (identical to BasicScheduler's output for this denoise).
+    denoise < 1.0 keeps only the tail of a longer schedule — the usual img2img
+    partial-denoise convention."""
     import comfy.samplers
     if sigmas is not None:
         return sigmas
+    steps = int(steps)
+    total_steps = steps
+    if denoise < 1.0:
+        if denoise <= 0.0:
+            raise ValueError("KSampler Multi-Choice: denoise must be > 0")
+        total_steps = int(steps / denoise)
     print(f"[MultiChoice] using the model's standard schedule "
-          f"('{scheduler}', {int(steps)} steps)")
+          f"('{scheduler}', {steps} steps, denoise {denoise})")
     ms = guider.model_patcher.get_model_object("model_sampling")
-    return comfy.samplers.calculate_sigmas(ms, scheduler, int(steps)).cpu()
+    s = comfy.samplers.calculate_sigmas(ms, scheduler, total_steps).cpu()
+    return s[-(steps + 1):]
 
 
 def _to_data_url(img_1hwc, max_side=384):
@@ -302,6 +318,11 @@ class KSamplerMultiChoice:
                 "tooltip": "Auto-pick candidate 0 after this many seconds without a click. "
                            "0 = wait forever (Cancel/interrupt still works). Set a value if this "
                            "workflow may run unattended/headless."}),
+            "denoise": ("FLOAT", {"default": 1.0, "min": 0.01, "max": 1.0, "step": 0.01,
+                "tooltip": "1.0 = txt2img (full schedule). Lower it to browse seeds for an "
+                           "img2img/refine pass — only the last denoise fraction of a longer "
+                           "schedule runs on your input latent, exactly like a standard "
+                           "KSampler. Ignored when a SIGMAS override is connected."}),
         }, "optional": {
             "sigmas": ("SIGMAS", {"tooltip": "Optional custom schedule, used instead of the "
                                              "standard one from scheduler/steps."}),
@@ -328,15 +349,15 @@ class KSamplerMultiChoice:
         return float("nan")
 
     def run(self, model, positive, negative, latent_image, vae, seed, cfg, sampler_name,
-            scheduler, steps, num_seeds=8, probe_steps=2, timeout_sec=0, sigmas=None,
-            unique_id=None):
+            scheduler, steps, num_seeds=8, probe_steps=2, timeout_sec=0, denoise=1.0,
+            sigmas=None, unique_id=None):
         import comfy.model_management
         import comfy.sample
         import comfy.utils
 
         guider = _make_guider(model, positive, negative, cfg)
         sampler = _make_sampler(sampler_name)
-        sigmas = _resolve_sigmas(guider, scheduler, steps, sigmas)
+        sigmas = _resolve_sigmas(guider, scheduler, steps, denoise, sigmas)
 
         n_probe = min(int(probe_steps), sigmas.shape[-1] - 1)
         probe_sigmas = sigmas[:n_probe + 1]
@@ -432,12 +453,17 @@ class KSamplerMultiChoice:
             out_denoised = out
 
         done = [pick]
+        queued_remaining = 0
         if nid and nid in _CACHE:
             _CACHE[nid]["done"].add(pick)
             done = sorted(_CACHE[nid]["done"])
+            queued_remaining = len(_CACHE[nid]["queued_picks"])
         # The grid stays clickable after the run: clicking another candidate
         # re-queues the prompt and renders it from the cached probe endpoint.
-        _send_event("multichoice.finished", {"node_id": nid, "pick": pick, "done": done})
+        # queued_remaining > 0 tells the frontend to re-queue for the next
+        # ctrl-clicked extra — each run drains one, chaining until empty.
+        _send_event("multichoice.finished", {"node_id": nid, "pick": pick, "done": done,
+                                             "queued_remaining": queued_remaining})
 
         info = "\n".join([f"picked candidate {pick} -> seed {seed_pick}"] +
                          [f"candidate {i}: seed {base_seed + i}, probed {n_probe} step(s)"
