@@ -1,0 +1,13 @@
+[project]
+name = "comfyui-kms"
+description = "A KSampler that shows you N seeds before committing: cheap probe pass, clickable thumbnails on the node, then finishes only the seed you pick — exact split-sigma continuation, no wasted steps. Model agnostic."
+version = "0.2.0"
+license = { text = "MIT" }
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/shootthesound/ComfyUI-KMS"
+
+[tool.comfy]
+PublisherId = "shootthesound"
+DisplayName = "KSampler Multi-Choice"
