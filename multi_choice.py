@@ -335,8 +335,8 @@ class KSamplerMultiChoice:
                                              "standard one from scheduler/steps."}),
         }, "hidden": {"unique_id": "UNIQUE_ID"}}
 
-    RETURN_TYPES = ("LATENT", "LATENT", "IMAGE", "STRING")
-    RETURN_NAMES = ("output", "denoised_output", "previews", "info")
+    RETURN_TYPES = ("LATENT", "LATENT", "IMAGE", "STRING", "INT")
+    RETURN_NAMES = ("output", "denoised_output", "previews", "info", "picked_seed")
     FUNCTION = "run"
     CATEGORY = "sampling"
     DESCRIPTION = ("A KSampler that shows you N seeds before committing: probes num_seeds "
@@ -474,12 +474,61 @@ class KSamplerMultiChoice:
         info = "\n".join([f"picked candidate {pick} -> seed {seed_pick}"] +
                          [f"candidate {i}: seed {base_seed + i}, probed {n_probe} step(s)"
                           for i in range(len(endpoints))])
-        return (out, out_denoised, preview_sheet, info)
+        return (out, out_denoised, preview_sheet, info, seed_pick)
+
+
+class KMSVerifyExact:
+    """A/B checker for the exact-continuation claim: wire the Multi-Choice `output`
+    latent into `a` and a vanilla KSampler render of the same seed (fed from the
+    `picked_seed` output) into `b` — the verdict is shown on the node itself."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {
+            "a": ("LATENT", {"tooltip": "Multi-Choice 'output' latent."}),
+            "b": ("LATENT", {"tooltip": "A vanilla full render of the same seed "
+                                        "(wire Multi-Choice's picked_seed output into "
+                                        "the KSampler's seed input)."}),
+        }}
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("report",)
+    FUNCTION = "compare"
+    CATEGORY = "sampling"
+    OUTPUT_NODE = True
+    DESCRIPTION = ("Compares two latents and reports whether they are bit-identical, "
+                   "numerically equivalent (float rounding only), or actually different. "
+                   "Use it to verify that Multi-Choice's probe-then-continue result "
+                   "matches a vanilla full render of the picked seed.")
+
+    def compare(self, a, b):
+        ta, tb = a["samples"].cpu(), b["samples"].cpu()
+        if tuple(ta.shape) != tuple(tb.shape):
+            report = (f"SHAPE MISMATCH ❌  {tuple(ta.shape)} vs {tuple(tb.shape)} — "
+                      f"these latents aren't comparable (different resolution/model?)")
+        elif torch.equal(ta, tb):
+            report = (f"BIT-IDENTICAL ✅  every one of the {ta.numel()} values matches "
+                      f"exactly (torch.equal)")
+        else:
+            d = (ta.float() - tb.float()).abs()
+            dmax, dmean = float(d.max()), float(d.mean())
+            if dmax <= 1e-4:
+                report = (f"NUMERICALLY EQUIVALENT ✅  max |diff| {dmax:.3e}, "
+                          f"mean {dmean:.3e} over {d.numel()} values — float rounding "
+                          f"only, visually identical")
+            else:
+                report = (f"DIFFERENT ❌  max |diff| {dmax:.3e}, mean {dmean:.3e} — "
+                          f"check both samplers use the same seed, deterministic "
+                          f"sampler (e.g. euler), scheduler, steps and cfg")
+        print(f"[MultiChoice verify] {report}")
+        return {"ui": {"text": [report]}, "result": (report,)}
 
 
 NODE_CLASS_MAPPINGS = {
     "KSamplerMultiChoice": KSamplerMultiChoice,
+    "KMSVerifyExact": KMSVerifyExact,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "KSamplerMultiChoice": "KSampler (Multi-Choice)",
+    "KMSVerifyExact": "Multi-Choice Verify (A/B Exact)",
 }

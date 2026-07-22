@@ -99,7 +99,27 @@ wiring needed.
 | `sigmas` (optional) | Custom schedule override — replaces scheduler/steps/denoise |
 
 Outputs the same `output` / `denoised_output` pair as `SamplerCustomAdvanced`,
-plus the labelled preview sheet as an IMAGE and an info string.
+plus the labelled preview sheet as an IMAGE, an info string, and `picked_seed`
+(the seed of the candidate you clicked — handy for wiring into other samplers).
+
+## Prove it to yourself
+
+Don't take the "bit-identical" claim on faith — the pack includes a
+**Multi-Choice Verify (A/B Exact)** node and a ready-made workflow
+(`example_workflows/…VERIFY-EXACT.json`) that puts it to the test:
+
+1. The Multi-Choice node's `picked_seed` output drives a **vanilla KSampler**,
+   which re-renders the same seed from scratch — no probe, no continuation.
+2. Both latents feed the Verify node, which reports the result right on
+   itself: **BIT-IDENTICAL** (every value matches exactly), *numerically
+   equivalent* (float rounding only), or *different* — with the actual max
+   difference, no hand-waving.
+3. Both images are saved side by side so your eyes can confirm what the
+   numbers say.
+
+Click any candidate you like — whichever you pick, the vanilla render follows
+the same seed. With a deterministic sampler (euler etc.) the checker should
+report bit-identical: the image you clicked *is* that seed's normal render.
 
 ## Controls while choosing
 
